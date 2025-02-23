@@ -1,12 +1,12 @@
-async function logError(request, message) {
+function logError(request, message) {
   console.error(
     `${message}, clientIp: ${request.headers.get(
-      "x-forwarded-for"
+      "cf-connecting-ip"
     )}, user-agent: ${request.headers.get("user-agent")}, url: ${request.url}`
   );
 }
 
-async function createNewRequest(request, url, proxyHostname, originHostname) {
+function createNewRequest(request, url, proxyHostname, originHostname) {
   const newRequestHeaders = new Headers(request.headers);
   for (const [key, value] of newRequestHeaders) {
     if (value.includes(originHostname)) {
@@ -23,10 +23,11 @@ async function createNewRequest(request, url, proxyHostname, originHostname) {
     method: request.method,
     headers: newRequestHeaders,
     body: request.body,
+    redirect: 'manual'
   });
 }
 
-async function setResponseHeaders(
+function setResponseHeaders(
   originalResponse,
   proxyHostname,
   originHostname,
@@ -50,6 +51,14 @@ async function setResponseHeaders(
   return newResponseHeaders;
 }
 
+/**
+ * 替换内容
+ * @param originalResponse 响应
+ * @param proxyHostname 代理地址 hostname
+ * @param pathnameRegex 代理地址路径匹配的正则表达式
+ * @param originHostname 替换的字符串
+ * @returns {Promise<*>}
+ */
 async function replaceResponseText(
   originalResponse,
   proxyHostname,
@@ -128,11 +137,11 @@ export default {
           )) ||
         (IP_WHITELIST_REGEX &&
           !new RegExp(IP_WHITELIST_REGEX).test(
-            request.headers.get("x-forwarded-for")
+            request.headers.get("cf-connecting-ip")
           )) ||
         (IP_BLACKLIST_REGEX &&
           new RegExp(IP_BLACKLIST_REGEX).test(
-            request.headers.get("x-forwarded-for")
+            request.headers.get("cf-connecting-ip")
           )) ||
         (REGION_WHITELIST_REGEX &&
           !new RegExp(REGION_WHITELIST_REGEX).test(
@@ -154,14 +163,14 @@ export default {
       }
       url.host = PROXY_HOSTNAME;
       url.protocol = PROXY_PROTOCOL;
-      const newRequest = await createNewRequest(
+      const newRequest = createNewRequest(
         request,
         url,
         PROXY_HOSTNAME,
         originHostname
       );
       const originalResponse = await fetch(newRequest);
-      const newResponseHeaders = await setResponseHeaders(
+      const newResponseHeaders = setResponseHeaders(
         originalResponse,
         PROXY_HOSTNAME,
         originHostname,
